@@ -744,4 +744,10 @@ window.addEventListener('DOMContentLoaded', () => {
   attachMapMoveListener();
   // Auto search if URL had params
   if (Object.keys(s).length) onSearch();
+  // Bind UI events (safe to bind here once DOM is ready)
+  els.searchBtn?.addEventListener('click', onSearch);
+  els.favOnly?.addEventListener('change', () => { if (allItems.length) { renderPage(els.metric.value); } else { onSearch(); } updateURLFromState(collectState()); });
+  els.sortBy?.addEventListener('change', () => { if (allItems.length) { allItems = applySorting(allItems, els.metric.value); currentPage = 1; renderPage(els.metric.value); updateURLFromState(collectState()); } });
+  els.sortDir?.addEventListener('change', () => { if (allItems.length) { allItems = applySorting(allItems, els.metric.value); currentPage = 1; renderPage(els.metric.value); updateURLFromState(collectState()); } });
+  els.bboxMode?.addEventListener('change', () => { if (els.bboxMode.checked) { onSearch(); } });
 });
