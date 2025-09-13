@@ -205,15 +205,36 @@ function buildOverpassQuery({ lat, lon, radius, includeGourmet, includeSight, bb
 }
 
 async function fetchPOIs(q) {
-  const url = 'https://overpass-api.de/api/interpreter';
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ data: q })
-  });
-  if (!res.ok) throw new Error(`Overpass API error: ${res.status}`);
-  const json = await res.json();
-  return json.elements || [];
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://lz4.overpass-api.de/api/interpreter'
+  ];
+  let lastErr;
+  for (const url of endpoints) {
+    try {
+      const res = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ data: q })
+      }, 12000);
+      if (!res.ok) throw new Error(`Overpass error ${res.status}`);
+      const json = await res.json();
+      return json.elements || [];
+    } catch (e) {
+      lastErr = e;
+      console.warn('Overpass endpoint failed:', url, e);
+      continue;
+    }
+  }
+  throw lastErr || new Error('All Overpass endpoints failed');
+}
+
+function fetchWithTimeout(url, options, ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...(options||{}), signal: ctrl.signal })
+    .finally(() => clearTimeout(id));
 }
 
 function safeHostname(urlStr){
@@ -480,7 +501,7 @@ async function onSearch() {
 
     // Use OSRM for accurate travel times (if possible)
     try {
-      const profile = els.mode.value === 'walking' ? 'walking' : 'driving';
+      const profile = els.mode.value === 'walking' ? 'foot' : 'driving';
       const osrmMins = await getOsrmDurations(profile, origin, normalized.slice(0, 100));
       osrmMins.forEach((m, i) => { if (m != null) normalized[i].etaAccMin = m; });
     } catch (e) {
