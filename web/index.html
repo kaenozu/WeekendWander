@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Where For Weekend</title>
+    <meta name="description" content="現在地から距離/時間でスポット検索し、Googleマップで経路表示するシンプルな無料Webアプリ" />
+    <meta name="theme-color" content="#0f1320" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="manifest" href="manifest.webmanifest" />
+  </head>
+  <body>
+    <header>
+      <h1>Where For Weekend</h1>
+      <p class="subtitle">現在地から距離または移動時間でスポットを検索</p>
+    </header>
+
+    <main>
+      <section class="controls">
+        <div class="row">
+          <label>
+            条件タイプ
+            <select id="metric">
+              <option value="distance">距離</option>
+              <option value="time">移動時間</option>
+            </select>
+          </label>
+
+          <label id="distance-label">
+            上限距離
+            <input id="distance" type="number" min="0.1" step="0.1" value="2" />
+            <select id="distanceUnit">
+              <option value="km" selected>km</option>
+              <option value="m">m</option>
+            </select>
+          </label>
+
+          <label id="time-label" class="hidden">
+            上限時間
+            <input id="time" type="number" min="1" step="1" value="15" />
+            <span>分</span>
+          </label>
+
+          <label id="mode-label" class="hidden">
+            移動手段
+            <select id="mode">
+              <option value="walking">徒歩</option>
+              <option value="driving" selected>車</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row">
+          <fieldset>
+            <legend>カテゴリ</legend>
+            <label><input type="checkbox" id="cat-gourmet" checked /> グルメ</label>
+            <label><input type="checkbox" id="cat-sightseeing" checked /> 観光・おでかけ</label>
+          </fieldset>
+          <label>
+            並び替え
+            <select id="sortBy">
+              <option value="auto" selected>自動（条件に応じて）</option>
+              <option value="distance">距離</option>
+              <option value="time">時間</option>
+              <option value="name">名前</option>
+              <option value="category">カテゴリ</option>
+            </select>
+          </label>
+          <label>
+            順序
+            <select id="sortDir">
+              <option value="asc" selected>昇順</option>
+              <option value="desc">降順</option>
+            </select>
+          </label>
+          <label style="align-items:center;gap:8px">
+            <input type="checkbox" id="bboxMode" /> 地図範囲で検索
+          </label>
+          <button id="searchBtn">検索する</button>
+        </div>
+
+        <div class="row">
+          <fieldset style="flex:1">
+            <legend>詳細カテゴリ（任意・複数可）</legend>
+            <div style="display:flex;flex-wrap:wrap;gap:10px">
+              <!-- グルメ詳細 -->
+              <label><input type="checkbox" id="detail-cafe" checked /> カフェ</label>
+              <label><input type="checkbox" id="detail-restaurant-ramen" checked /> ラーメン</label>
+              <label><input type="checkbox" id="detail-restaurant-sushi" checked /> 寿司</label>
+              <label><input type="checkbox" id="detail-fast_food" /> ファストフード</label>
+              <label><input type="checkbox" id="detail-bar" /> バー</label>
+              <label><input type="checkbox" id="detail-pub" /> パブ</label>
+              <label><input type="checkbox" id="detail-bakery" /> ベーカリー</label>
+
+              <!-- 観光詳細 -->
+              <label><input type="checkbox" id="detail-park" checked /> 公園</label>
+              <label><input type="checkbox" id="detail-garden" /> 庭園</label>
+              <label><input type="checkbox" id="detail-museum" checked /> 美術館・博物館</label>
+              <label><input type="checkbox" id="detail-gallery" /> ギャラリー</label>
+              <label><input type="checkbox" id="detail-viewpoint" /> ビューポイント</label>
+              <label><input type="checkbox" id="detail-attraction" /> 観光名所</label>
+              <label><input type="checkbox" id="detail-theme_park" /> テーマパーク</label>
+              <label><input type="checkbox" id="detail-zoo" /> 動物園</label>
+              <label><input type="checkbox" id="detail-aquarium" /> 水族館</label>
+              <label><input type="checkbox" id="detail-historic" /> 史跡</label>
+              <!-- 宗教施設 -->
+              <label><input type="checkbox" id="detail-temple" /> 寺</label>
+              <label><input type="checkbox" id="detail-shrine" /> 神社</label>
+              <label><input type="checkbox" id="detail-church" /> 教会</label>
+            </div>
+          </fieldset>
+          <label style="margin-left:auto;align-items:center;gap:8px"><input type="checkbox" id="favOnly" /> お気に入りのみ</label>
+        </div>
+
+        <p id="status" class="status">位置情報の許可をお願いします…</p>
+      </section>
+
+      <section class="results">
+        <div id="map" aria-label="地図"></div>
+        <div class="list-header">
+          <span>スポット</span>
+          <span id="sortLabel">距離</span>
+        </div>
+        <ul id="results"></ul>
+        <div class="pagination" id="pagination"></div>
+      </section>
+    </main>
+
+    <footer>
+      <small>
+        データ: OpenStreetMap (Overpass API)。経路表示: Google マップ。推定時間は概算です。名称不明はOSMに名称がない場合に表示されます。
+      </small>
+    </footer>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="script.js"></script>
+  </body>
+  </html>

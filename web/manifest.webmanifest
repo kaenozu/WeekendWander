@@ -1,0 +1,10 @@
+{
+  "name": "Where For Weekend",
+  "short_name": "WFW",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f1320",
+  "theme_color": "#0f1320",
+  "icons": []
+}
+

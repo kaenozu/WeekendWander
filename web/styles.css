@@ -1,0 +1,41 @@
+:root{
+  --bg:#0f1320;--card:#161a2b;--text:#e7e9ee;--muted:#9aa0b4;--accent:#66e5a6;--accent-2:#7db3ff;--danger:#ff6b6b
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+header{padding:20px 16px;border-bottom:1px solid #1f2340;background:linear-gradient(180deg,rgba(125,179,255,.08),rgba(102,229,166,.05) 60%,transparent)}
+h1{margin:0;font-size:22px}
+.subtitle{margin:4px 0 0;color:var(--muted)}
+main{max-width:960px;margin:0 auto;padding:16px}
+.controls{background:var(--card);border:1px solid #242a47;border-radius:12px;padding:16px;margin-bottom:16px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+label, fieldset{display:flex;flex-direction:column;gap:6px;color:var(--text)}
+input, select{background:#0c1020;border:1px solid #30385c;color:var(--text);padding:10px 12px;border-radius:10px;min-width:120px}
+button{background:linear-gradient(135deg,var(--accent),#12b886);color:#08101a;border:none;padding:10px 16px;border-radius:10px;cursor:pointer;font-weight:600}
+button:hover{filter:brightness(1.02)}
+fieldset{border:1px solid #2a3156;border-radius:10px;padding:10px 12px}
+.status{margin:10px 2px 0;color:var(--muted)}
+.results{background:var(--card);border:1px solid #242a47;border-radius:12px;padding:0}
+.results #map{height:360px;border-bottom:1px solid #2a3156;border-top-left-radius:12px;border-top-right-radius:12px;overflow:hidden}
+.list-header{display:grid;grid-template-columns:1fr 120px;padding:10px 12px;border-bottom:1px solid #2a3156;color:var(--muted)}
+ul{list-style:none;margin:0;padding:0}
+li.result{display:grid;grid-template-columns:1fr 120px;gap:10px;padding:12px;border-bottom:1px solid #212747}
+li.result:last-child{border-bottom:none}
+.result.active{background:#121838}
+.title{font-weight:600}
+.meta{color:var(--muted);font-size:12px}
+.thumb{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #2a3156;margin-top:6px}
+.fav-btn{background:transparent;border:1px solid #36406d;color:#ffd76a;border-radius:8px;padding:4px 8px;cursor:pointer}
+.fav-btn.active{background:#2b2240;color:#ffcc00;border-color:#5a4b86}
+.open-map{justify-self:end;background:linear-gradient(135deg,var(--accent-2),#4e9bff);color:#061022;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+.chips{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+.chip{background:#0e1430;border:1px solid #2a3156;color:#c9d0ea;padding:2px 8px;border-radius:999px;font-size:11px}
+.hidden{display:none}
+footer{max-width:960px;margin:12px auto 32px;color:var(--muted);padding:0 16px}
+.pagination{display:flex;gap:8px;align-items:center;justify-content:flex-end;border-top:1px solid #2a3156;padding:10px 12px}
+.pagination button{background:#0c1020;border:1px solid #30385c;color:var(--text);padding:6px 10px;border-radius:8px;cursor:pointer}
+.pagination .info{color:var(--muted)}
+@media (max-width:560px){
+  .list-header, li.result{grid-template-columns:1fr}
+  .open-map{justify-self:start}
+}
