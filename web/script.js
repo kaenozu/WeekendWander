@@ -106,6 +106,9 @@ if (navigator.geolocation) {
       setStatus('現在地を取得しました。検索条件を選んで「検索する」を押してください。');
       ensureMap();
       updateUserMarker();
+      if (map && currentPosition) {
+        map.setView([currentPosition.lat, currentPosition.lon], 14);
+      }
     },
     (err) => {
       console.warn(err);
@@ -201,7 +204,7 @@ function buildOverpassQuery({ lat, lon, radius, includeGourmet, includeSight, bb
   return `[
     out:json][timeout:25];(
       ${parts.join('\n')}
-    );out body 120;`;
+    );out body 400;`;
 }
 
 async function fetchPOIs(q) {
@@ -477,7 +480,7 @@ async function onSearch() {
     const query = buildOverpassQuery({
       lat: currentPosition.lat,
       lon: currentPosition.lon,
-      radius: Math.min(Math.max(Math.round(radiusMeters), 200), 12000), // clamp 200m-12km to be gentle
+      radius: Math.min(Math.max(Math.round(radiusMeters), 200), 30000), // clamp 200m-30km
       includeGourmet,
       includeSight,
       bbox
