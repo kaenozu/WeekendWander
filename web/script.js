@@ -52,6 +52,7 @@ let allItems = [];
 let pageSize = 20;
 let currentPage = 1;
 let lastSearchState = null;
+let thumbnailObserver; // For lazy loading
 
 // Average speeds (m/min) for rough time filtering without paid routing APIs
 const SPEEDS = {
@@ -213,24 +214,28 @@ async function fetchPOIs(q) {
     'https://overpass.kumi.systems/api/interpreter',
     'https://lz4.overpass-api.de/api/interpreter'
   ];
-  let lastErr;
-  for (const url of endpoints) {
-    try {
-      const res = await fetchWithTimeout(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ data: q })
-      }, 12000);
-      if (!res.ok) throw new Error(`Overpass error ${res.status}`);
-      const json = await res.json();
-      return json.elements || [];
-    } catch (e) {
-      lastErr = e;
-      console.warn('Overpass endpoint failed:', url, e);
-      continue;
-    }
+
+  const promises = endpoints.map(url =>
+    fetchWithTimeout(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ data: q })
+    }, 12000).then(res => {
+      if (!res.ok) throw new Error(`Overpass error ${res.status} from ${url}`);
+      return res.json();
+    }).then(json => {
+      if (!json.elements) throw new Error(`No elements from ${url}`);
+      return json.elements;
+    })
+  );
+
+  try {
+    const elements = await Promise.any(promises);
+    return elements || [];
+  } catch (e) {
+    console.error('All Overpass endpoints failed:', e);
+    throw new Error('All Overpass endpoints failed');
   }
-  throw lastErr || new Error('All Overpass endpoints failed');
 }
 
 function fetchWithTimeout(url, options, ms) {
@@ -318,12 +323,14 @@ function renderResults(items, metric) {
     const thumb = document.createElement('img');
     thumb.className = 'thumb hidden';
     thumb.id = `thumb-${it.id}`;
+    thumb.dataset.itemId = it.id; // Set item id for the observer
+    thumbnailObserver.observe(thumb); // Observe the image for lazy loading
     left.appendChild(thumb);
     left.appendChild(chips);
 
     const distanceText = document.createElement('div');
     distanceText.className = 'meta';
-    const eta = it.etaAccMin ?? it.etaMin;
+    const eta = it.etaMin;
     distanceText.textContent = metric === 'distance'
       ? metersToHuman(it.distance)
       : minutesToHuman(eta);
@@ -384,7 +391,7 @@ function makeMarker(item){
   const marker = L.marker([item.lat, item.lon]);
   const content = `
     <strong>${item.name}</strong><br/>
-    ${metersToHuman(item.distance)} ・ ${minutesToHuman(item.etaAccMin ?? item.etaMin)}<br/>
+    ${metersToHuman(item.distance)} ・ ${minutesToHuman(item.etaMin)}
     <button id="go-${item.id}" style="margin-top:6px">Googleマップで経路</button>
   `;
   marker.bindPopup(content);
@@ -511,15 +518,6 @@ async function onSearch() {
       n.etaMin = n.distance / SPEEDS[els.mode.value];
     }
 
-    // Use OSRM for accurate travel times (if possible)
-    try {
-      const profile = els.mode.value === 'walking' ? 'foot' : 'driving';
-      const osrmMins = await getOsrmDurations(profile, origin, normalized.slice(0, 100));
-      osrmMins.forEach((m, i) => { if (m != null) normalized[i].etaAccMin = m; });
-    } catch (e) {
-      console.warn('OSRM failed, fallback to heuristic:', e);
-    }
-
     // Apply final filter based on chosen metric
     let filtered;
     if (metric === 'distance') {
@@ -538,7 +536,7 @@ async function onSearch() {
       }
     } else {
       const limitMin = parseFloat(els.time.value);
-      const etaOf = (n) => (n.etaAccMin ?? n.etaMin);
+      const etaOf = (n) => n.etaMin;
       filtered = normalized.filter(n => etaOf(n) <= limitMin);
       filtered.sort((a,b) => etaOf(a) - etaOf(b));
     }
@@ -568,7 +566,6 @@ function renderPage(metric){
   renderResults(pageItems, metric);
   updateMap(pageItems);
   renderPagination();
-  fetchThumbnailsFor(pageItems);
 }
 
 function renderPagination(){
@@ -589,38 +586,15 @@ function saveFavs(f){ localStorage.setItem('wfw_favs', JSON.stringify(f)); }
 function isFav(id){ const f = loadFavs(); return !!f[id]; }
 function toggleFav(item){
   const f = loadFavs();
-  if (f[item.id]) { delete f[item.id]; }
+  if (f[item.id]) { delete f[item.id]; } 
   else { f[item.id] = { id:item.id, name:item.name, lat:item.lat, lon:item.lon }; }
   saveFavs(f);
-}
-
-async function getOsrmDurations(profile, origin, items){
-  // Uses OSRM public demo server. Returns minutes array aligned with items
-  const base = 'https://router.project-osrm.org';
-  const chunkSize = 80; // be gentle with public server
-  const results = new Array(items.length).fill(null);
-  for (let start = 0; start < items.length; start += chunkSize) {
-    const end = Math.min(start + chunkSize, items.length);
-    const coords = [ `${origin.lon},${origin.lat}` ].concat(
-      items.slice(start, end).map(p => `${p.lon},${p.lat}`)
-    ).join(';');
-    const url = `${base}/table/v1/${profile}/${coords}?sources=0&annotations=duration`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`OSRM ${res.status}`);
-    const json = await res.json();
-    const durs = json.durations?.[0] || [];
-    for (let i = start; i < end; i++) {
-      const sec = durs[i - start + 1];
-      results[i] = (typeof sec === 'number' && isFinite(sec)) ? sec / 60 : null;
-    }
-  }
-  return results;
 }
 
 function applySorting(items, metric){
   const sortBy = els.sortBy?.value || 'auto';
   const dir = (els.sortDir?.value || 'asc') === 'asc' ? 1 : -1;
-  const etaOf = (n) => (n.etaAccMin ?? n.etaMin ?? Infinity);
+  const etaOf = (n) => (n.etaMin ?? Infinity);
   const nameOf = (n) => (n.name || '').toString().toLowerCase();
   const catOf = (n) => (n.cats?.[0] || '');
   const by = (v1,v2) => (v1<v2?-1: v1>v2?1:0) * dir;
@@ -637,42 +611,59 @@ function applySorting(items, metric){
   return items.slice().sort(compare);
 }
 
-async function fetchThumbnailsFor(items){
-  const limited = items.slice(0, 12);
-  await Promise.all(limited.map(async (it) => {
-    try {
-      let src = null;
-      const wp = it.tags?.wikipedia;
-      if (wp && typeof wp === 'string' && wp.includes(':')) {
-        const [lang, titleRaw] = wp.split(':', 2);
-        const title = encodeURIComponent(titleRaw.replace(/ /g, '_'));
-        const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${title}`;
-        const r = await fetch(url);
-        if (r.ok) {
-          const j = await r.json();
-          src = j.thumbnail?.source || null;
+// --- Thumbnail Lazy Loading ---
+function initThumbnailObserver() {
+  thumbnailObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const img = entry.target;
+        const itemId = img.dataset.itemId;
+        const item = allItems.find(it => it.id == itemId);
+        if (item) {
+          fetchThumbnailForItem(item, img);
         }
+        observer.unobserve(img);
       }
-      if (!src && it.tags?.wikidata) {
-        const q = it.tags.wikidata;
-        const r = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${q}.json`);
-        if (r.ok) {
-          const j = await r.json();
-          const ent = j.entities?.[q];
-          const p18 = ent?.claims?.P18?.[0]?.mainsnak?.datavalue?.value;
-          if (p18) {
-            const filename = encodeURIComponent(p18.replace(/ /g, '_'));
-            src = `https://commons.wikimedia.org/wiki/Special:FilePath/${filename}?width=120`;
-          }
-        }
-      }
-      if (src) {
-        const img = document.getElementById(`thumb-${it.id}`);
-        if (img) { img.src = src; img.classList.remove('hidden'); }
-      }
-    } catch {}
-  }));
+    });
+  }, { rootMargin: '0px 0px 200px 0px' }); // Start loading when 200px from viewport
 }
+
+async function fetchThumbnailForItem(it, img) {
+  try {
+    let src = null;
+    const wp = it.tags?.wikipedia;
+    if (wp && typeof wp === 'string' && wp.includes(':')) {
+      const [lang, titleRaw] = wp.split(':', 2);
+      const title = encodeURIComponent(titleRaw.replace(/ /g, '_'));
+      const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${title}`;
+      const r = await fetch(url);
+      if (r.ok) {
+        const j = await r.json();
+        src = j.thumbnail?.source || null;
+      }
+    }
+    if (!src && it.tags?.wikidata) {
+      const q = it.tags.wikidata;
+      const r = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${q}.json`);
+      if (r.ok) {
+        const j = await r.json();
+        const ent = j.entities?.[q];
+        const p18 = ent?.claims?.P18?.[0]?.mainsnak?.datavalue?.value;
+        if (p18) {
+          const filename = encodeURIComponent(p18.replace(/ /g, '_'));
+          src = `https://commons.wikimedia.org/wiki/Special:FilePath/${filename}?width=120`;
+        }
+      }
+    }
+    if (src) {
+      img.src = src;
+      img.classList.remove('hidden');
+    }
+  } catch (e) {
+    console.warn(`Failed to fetch thumbnail for ${it.id}`, e);
+  }
+}
+
 
 // URL state sync helpers
 function collectState(){
@@ -739,7 +730,7 @@ function parseURLState(){
   return p;
 }
 
-function debounce(fn, ms){
+function debounce(fn, ms){ 
   let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
 }
 
@@ -761,6 +752,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const s = parseURLState();
   applyState(s);
   ensureMap();
+  initThumbnailObserver(); // Initialize lazy loader
   attachMapMoveListener();
   // Auto search if URL had params
   if (Object.keys(s).length) onSearch();
