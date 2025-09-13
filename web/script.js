@@ -477,10 +477,17 @@ async function onSearch() {
     els.results.innerHTML = '';
 
     const bbox = (els.bboxMode?.checked && map) ? (()=>{ const b = map.getBounds(); return { south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }; })() : null;
+    // For distance search, widen fetch radius to include a band around the target distance
+    let queryRadius = Math.min(Math.max(Math.round(radiusMeters), 200), 30000);
+    if (!bbox && metric === 'distance') {
+      const target = queryRadius;
+      const band = Math.max(2000, target * 0.15); // 2km or 15%
+      queryRadius = Math.min(target + band, 30000);
+    }
     const query = buildOverpassQuery({
       lat: currentPosition.lat,
       lon: currentPosition.lon,
-      radius: Math.min(Math.max(Math.round(radiusMeters), 200), 30000), // clamp 200m-30km
+      radius: queryRadius, // fetch a bit beyond target to form a ring
       includeGourmet,
       includeSight,
       bbox
@@ -517,8 +524,16 @@ async function onSearch() {
       const limit = els.distanceUnit.value === 'km'
         ? parseFloat(els.distance.value) * 1000
         : parseFloat(els.distance.value);
-      filtered = normalized.filter(n => n.distance <= limit);
-      filtered.sort((a,b) => a.distance - b.distance);
+      const target = limit;
+      const band = Math.max(2000, target * 0.15);
+      // Prefer items near the ring [target - band, target + band]
+      const ring = normalized.filter(n => Math.abs(n.distance - target) <= band);
+      if (ring.length) {
+        filtered = ring.sort((a,b) => Math.abs(a.distance - target) - Math.abs(b.distance - target));
+      } else {
+        // Fallback to within target distance, nearest first
+        filtered = normalized.filter(n => n.distance <= limit).sort((a,b) => a.distance - b.distance);
+      }
     } else {
       const limitMin = parseFloat(els.time.value);
       const etaOf = (n) => (n.etaAccMin ?? n.etaMin);
