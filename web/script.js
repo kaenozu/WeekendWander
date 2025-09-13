@@ -364,7 +364,9 @@ function openGoogleMapsDirections(destLat, destLon) {
   if (originLat == null || originLon == null) return;
   const origin = `${originLat},${originLon}`;
   const dest = `${destLat},${destLon}`;
-  const travelmode = els.metric.value === 'time' ? els.mode.value : 'walking';
+  // Default to driving unless user explicitly selected walking
+  const selected = els.mode?.value;
+  const travelmode = selected === 'walking' ? 'walking' : 'driving';
   const url = new URL('https://www.google.com/maps/dir/');
   url.searchParams.set('api', '1');
   url.searchParams.set('origin', origin);
