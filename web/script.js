@@ -335,8 +335,10 @@ function renderResults(items, metric) {
 }
 
 function openGoogleMapsDirections(destLat, destLon) {
-  if (!currentPosition) return;
-  const origin = `${currentPosition.lat},${currentPosition.lon}`;
+  const originLat = currentPosition?.lat ?? map?.getCenter()?.lat;
+  const originLon = currentPosition?.lon ?? map?.getCenter()?.lng;
+  if (originLat == null || originLon == null) return;
+  const origin = `${originLat},${originLon}`;
   const dest = `${destLat},${destLon}`;
   const travelmode = els.metric.value === 'time' ? els.mode.value : 'walking';
   const url = new URL('https://www.google.com/maps/dir/');
@@ -412,9 +414,12 @@ function highlightItem(id, on){
 
 async function onSearch() {
   try {
-    if (!currentPosition) {
-      setStatus('現在地が未取得です。位置情報の許可をご確認ください。', true);
-      return;
+    let origin = currentPosition;
+    if (!origin) {
+      ensureMap();
+      const c = map.getCenter();
+      origin = { lat: c.lat, lon: c.lng };
+      setStatus('現在地が未取得のため、地図の中心を起点に検索します。');
     }
 
     const metric = els.metric.value; // 'distance' | 'time'
@@ -468,15 +473,15 @@ async function onSearch() {
 
     // Compute distances and estimated times
     for (const n of normalized) {
-      const d = haversine(currentPosition.lat, currentPosition.lon, n.lat, n.lon);
+      const d = haversine(origin.lat, origin.lon, n.lat, n.lon);
       n.distance = d;
       n.etaMin = n.distance / SPEEDS[els.mode.value];
     }
 
     // Use OSRM for accurate travel times (if possible)
     try {
-      const profile = els.mode.value === 'walking' ? 'foot' : 'car';
-      const osrmMins = await getOsrmDurations(profile, currentPosition, normalized.slice(0, 100));
+      const profile = els.mode.value === 'walking' ? 'walking' : 'driving';
+      const osrmMins = await getOsrmDurations(profile, origin, normalized.slice(0, 100));
       osrmMins.forEach((m, i) => { if (m != null) normalized[i].etaAccMin = m; });
     } catch (e) {
       console.warn('OSRM failed, fallback to heuristic:', e);
@@ -719,4 +724,3 @@ window.addEventListener('DOMContentLoaded', () => {
   // Auto search if URL had params
   if (Object.keys(s).length) onSearch();
 });
-
